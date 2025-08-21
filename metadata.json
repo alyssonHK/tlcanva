@@ -1,0 +1,5 @@
+{
+  "name": "Tldraw File Canvas",
+  "description": "A web application that uses tldraw as an interactive canvas for drawing, writing, and managing files. Users can drag and drop images, videos, PDFs, and other file types directly onto the canvas, with support for previews and file cards.",
+  "requestFramePermissions": []
+}
