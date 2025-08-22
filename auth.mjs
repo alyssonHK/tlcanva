@@ -8,7 +8,7 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 const JWT_SECRET = process.env.JWT_SECRET || 'fallback-secret-key';
-const USERS_FILE = path.join(__dirname, 'users.json');
+const USERS_FILE = path.join('/tmp', 'users.json');
 
 // Read users from JSON file
 export function readUsers() {
