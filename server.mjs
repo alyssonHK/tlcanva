@@ -1,12 +1,19 @@
 // server.mjs
 //teste
 import express from 'express';
+import dotenv from 'dotenv';
+
+// Carrega variáveis do arquivo .env.local em desenvolvimento
+dotenv.config({ path: '.env.local' });
 import cors from 'cors';
 import multer from 'multer';
 import { createClient } from '@supabase/supabase-js';
 
 const app = express();
-const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY); // Use a Service Role Key aqui
+// Use o ANON KEY por padrão em desenvolvimento. Se precisar de privilégios administrativos
+// (upload sem contexto do usuário, gerenciamento de buckets etc.), configure a
+// SUPABASE_SERVICE_ROLE_KEY em produção e use com cuidado (não commitá-la).
+const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_ANON_KEY || process.env.SUPABASE_SERVICE_ROLE_KEY);
 
 app.use(cors({ origin: '*' })); // Simplificado para o exemplo
 app.use(express.json());
