@@ -20,19 +20,17 @@ export function Canvas(): React.ReactNode {
 
 	const fileHandlers = useFileHandlers(editor, onError);
 
-	const extractFilenameFromUrl = (url: string): string | null => {
-		try {
-			// Extrair o filename da URL
-			const urlObj = new URL(url);
-			const pathname = urlObj.pathname;
-			const filename = pathname.split('/').pop();
-			return filename || null;
-		} catch {
-			// Se não for uma URL válida, tentar extrair o filename diretamente
-			const parts = url.split('/');
-			return parts[parts.length - 1] || null;
-		}
-	};
+const extractFilenameFromUrl = (url: string): string | null => {
+    try {
+        const urlObj = new URL(url);
+        // O caminho do arquivo é a última parte do pathname
+        const pathnameParts = urlObj.pathname.split('/');
+        return pathnameParts[pathnameParts.length - 1] || null;
+    } catch (e) {
+        console.error("Invalid URL for filename extraction", e);
+        return null;
+    }
+};
 
 	const handleShapeDelete = useCallback(async (deletedShapes: FileCardShape[]) => {
 		for (const shape of deletedShapes) {
