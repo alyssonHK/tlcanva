@@ -28,9 +28,9 @@ const authenticateSupabaseToken = async (req, res, next) => {
 // Rota de Upload
 app.post('/api/upload', authenticateSupabaseToken, upload.single('file'), async (req, res) => {
     if (!req.file) return res.status(400).json({ message: 'No file uploaded' });
-
-    const fileName = `${req.user.id}/${Date.now()}-${req.file.originalname}`;
-
+    
+    const sanitizedOriginalName = req.file.originalname.normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-zA-Z0-9.\-_]/g, '-');
+    const fileName = `${req.user.id}/${Date.now()}-${sanitizedOriginalName}`;
     const { data, error } = await supabase.storage
         .from('uploads')
         .upload(fileName, req.file.buffer, { contentType: req.file.mimetype });
