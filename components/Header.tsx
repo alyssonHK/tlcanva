@@ -25,11 +25,11 @@ export const Header: React.FC = () => {
               <div className="flex items-center space-x-2">
                 <div className="w-8 h-8 bg-indigo-100 rounded-full flex items-center justify-center">
                   <span className="text-sm font-medium text-indigo-800">
-                    {user.name.charAt(0).toUpperCase()}
+                      {user.user_metadata.name?.charAt(0).toUpperCase()}
                   </span>
                 </div>
                 <div className="hidden sm:block">
-                  <p className="text-sm font-medium text-gray-900">{user.name}</p>
+                  <p className="text-sm font-medium text-gray-900">{user.user_metadata.name}</p>
                   <p className="text-xs text-gray-500">{user.email}</p>
                 </div>
               </div>
