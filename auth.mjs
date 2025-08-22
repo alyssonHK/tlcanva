@@ -1,82 +1,79 @@
+// auth.mjs
+
 import jwt from 'jsonwebtoken';
 import bcrypt from 'bcryptjs';
-import fs from 'fs';
-import path from 'path';
-import { fileURLToPath } from 'url';
+import { createClient } from '@supabase/supabase-js';
 
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
+// 1. Inicializa o cliente do Supabase
+// Ele usará as variáveis de ambiente que configuramos na Vercel
+const supabase = createClient(
+  process.env.SUPABASE_URL,
+  process.env.SUPABASE_ANON_KEY
+);
 
 const JWT_SECRET = process.env.JWT_SECRET || 'fallback-secret-key';
-const USERS_FILE = path.join('/tmp', 'users.json');
 
-// Read users from JSON file
-export function readUsers() {
-  try {
-    if (!fs.existsSync(USERS_FILE)) {
-      return [];
-    }
-    const data = fs.readFileSync(USERS_FILE, 'utf8');
-    return JSON.parse(data);
-  } catch (error) {
-    console.error('Error reading users file:', error);
-    return [];
+// --- FUNÇÕES MODIFICADAS PARA O SUPABASE ---
+
+export async function findUserByEmail(email) {
+  const { data, error } = await supabase
+    .from('users')
+    .select('*')
+    .eq('email', email.toLowerCase())
+    .single(); // .single() pega um único resultado ou retorna null
+
+  if (error && error.code !== 'PGRST116') { // PGRST116 é o erro para "nenhuma linha encontrada"
+    console.error('Error finding user by email:', error);
+    return null;
   }
+  return data;
 }
 
-// Write users to JSON file
-export function writeUsers(users) {
-  try {
-    fs.writeFileSync(USERS_FILE, JSON.stringify(users, null, 2));
-  } catch (error) {
-    console.error('Error writing users file:', error);
+export async function findUserById(id) {
+  const { data, error } = await supabase
+    .from('users')
+    .select('*')
+    .eq('id', id)
+    .single();
+
+  if (error) {
+    console.error('Error finding user by id:', error);
+    return null;
   }
+  return data;
 }
 
-// Find user by email
-export function findUserByEmail(email) {
-  const users = readUsers();
-  return users.find(user => user.email.toLowerCase() === email.toLowerCase());
-}
-
-// Find user by ID
-export function findUserById(id) {
-  const users = readUsers();
-  return users.find(user => user.id === id);
-}
-
-// Create new user
 export async function createUser(email, password, name) {
-  const users = readUsers();
-  
-  // Check if user already exists
-  if (findUserByEmail(email)) {
+  const existingUser = await findUserByEmail(email);
+  if (existingUser) {
     throw new Error('User already exists');
   }
 
-  // Hash password
   const hashedPassword = await bcrypt.hash(password, 12);
-  
-  // Create new user
-  const newUser = {
-    id: generateId(),
-    email: email.toLowerCase(),
-    password: hashedPassword,
-    name,
-    createdAt: new Date().toISOString()
-  };
 
-  users.push(newUser);
-  writeUsers(users);
+  const { data, error } = await supabase
+    .from('users')
+    .insert([
+      {
+        email: email.toLowerCase(),
+        password: hashedPassword,
+        name,
+      },
+    ])
+    .select()
+    .single();
 
-  // Return user without password
-  const { password: _, ...userPublic } = newUser;
+  if (error) {
+    console.error('Error creating user:', error);
+    throw new Error('Could not create user');
+  }
+
+  const { password: _, ...userPublic } = data;
   return userPublic;
 }
 
-// Verify user credentials
 export async function verifyUser(email, password) {
-  const user = findUserByEmail(email);
+  const user = await findUserByEmail(email);
   if (!user) {
     return null;
   }
@@ -86,25 +83,24 @@ export async function verifyUser(email, password) {
     return null;
   }
 
-  // Return user without password
   const { password: _, ...userPublic } = user;
   return userPublic;
 }
 
-// Generate JWT token
+// O restante do arquivo (generateToken, verifyToken, etc.) permanece igual.
+
 export function generateToken(user) {
   return jwt.sign(
-    { 
-      userId: user.id, 
+    {
+      userId: user.id,
       email: user.email,
-      name: user.name
+      name: user.name,
     },
     JWT_SECRET,
     { expiresIn: '7d' }
   );
 }
 
-// Verify JWT token
 export function verifyToken(token) {
   try {
     return jwt.verify(token, JWT_SECRET);
@@ -113,15 +109,14 @@ export function verifyToken(token) {
   }
 }
 
-// Middleware to authenticate requests
 export function authenticateToken(req, res, next) {
   const authHeader = req.headers['authorization'];
-  const token = authHeader && authHeader.split(' ')[1]; // Bearer TOKEN
+  const token = authHeader && authHeader.split(' ')[1];
 
   if (!token) {
-    return res.status(401).json({ 
-      success: false, 
-      message: 'Access denied. No token provided.' 
+    return res.status(401).json({
+      success: false,
+      message: 'Access denied. No token provided.',
     });
   }
 
@@ -130,14 +125,13 @@ export function authenticateToken(req, res, next) {
     req.user = decoded;
     next();
   } catch (error) {
-    res.status(403).json({ 
-      success: false, 
-      message: 'Invalid token.' 
+    res.status(403).json({
+      success: false,
+      message: 'Invalid token.',
     });
   }
 }
 
-// Generate unique ID
 function generateId() {
   return Date.now().toString() + Math.random().toString(36).substr(2, 9);
 }

@@ -35,7 +35,6 @@ export async function uploadFile(file: File): Promise<UploadedFile> {
       throw new Error(result.message || 'File upload failed');
     }
 
-    // The backend returns a relative URL, prepend the base URL for external use
  // The backend returns a relative URL, prepend the current origin for external use
     const fullUrl = new URL(result.url, window.location.origin).href;
     
