@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { useAuth } from '../../contexts/AuthContext';
+const [loading, setLoading] = useState(false);
 
 interface RegisterProps {
   onSwitchToLogin: () => void;
@@ -17,7 +18,7 @@ export const Register: React.FC<RegisterProps> = ({ onSwitchToLogin }) => {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
-
+    setLoading(true);
     // Validações básicas
     if (password !== confirmPassword) {
       setError('As senhas não coincidem');
