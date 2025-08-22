@@ -15,7 +15,24 @@ const app = express();
 // SUPABASE_SERVICE_ROLE_KEY em produção e use com cuidado (não commitá-la).
 const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_ANON_KEY || process.env.SUPABASE_SERVICE_ROLE_KEY);
 
-app.use(cors({ origin: '*' })); // Simplificado para o exemplo
+// CORS seguro para produção: ajuste os domínios conforme necessário
+const allowedOrigins = [
+  'https://tlcanva.vercel.app',
+  'https://www.tlcanva.vercel.app',
+  'http://localhost:5173', // para dev local
+];
+app.use(cors({
+  origin: function (origin, callback) {
+    // Permite requests sem origin (ex: mobile, curl) ou de origens permitidas
+    if (!origin || allowedOrigins.includes(origin)) {
+      callback(null, true);
+    } else {
+      callback(new Error('Not allowed by CORS'));
+    }
+  },
+  allowedHeaders: ['Authorization', 'Content-Type'],
+  credentials: true,
+}));
 app.use(express.json());
 
 const upload = multer({ storage: multer.memoryStorage() });
@@ -23,11 +40,15 @@ const upload = multer({ storage: multer.memoryStorage() });
 // Middleware para validar o token do Supabase
 const authenticateSupabaseToken = async (req, res, next) => {
   const authHeader = req.headers['authorization'];
+  console.log('Authorization header:', authHeader);
   const token = authHeader && authHeader.split(' ')[1];
   if (!token) return res.status(401).json({ message: 'No token provided' });
 
   const { data: { user }, error } = await supabase.auth.getUser(token);
-  if (error || !user) return res.status(403).json({ message: 'Invalid token' });
+  if (error || !user) {
+    console.error('Supabase getUser error:', error);
+    return res.status(403).json({ message: 'Invalid token' });
+  }
 
   req.user = user;
   next();
