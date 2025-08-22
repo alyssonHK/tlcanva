@@ -294,8 +294,10 @@ app.use((error, req, res, next) => {
 });
 
 // Start server
-app.listen(PORT, () => {
-  console.log(`🚀 TLDraw File Canvas Server running on http://localhost:${PORT}`);
-  console.log(`📁 Upload directory: ${uploadsDir}`);
-  console.log(`🔗 Health check: http://localhost:${PORT}/api/health`);
-});
+// app.listen(PORT, () => {
+//  console.log(`🚀 TLDraw File Canvas Server running on http://localhost:${PORT}`);
+//  console.log(`📁 Upload directory: ${uploadsDir}`);
+//  console.log(`🔗 Health check: http://localhost:${PORT}/api/health`);
+//});
+export default app;
+
