@@ -1,6 +1,6 @@
 import { UploadedFile } from '../types';
 
-const BACKEND_URL = (import.meta as any).env.VITE_BACKEND_URL || 'http://localhost:3001';
+const BACKEND_URL = import.meta.env.VITE_BACKEND_URL || '';
 const UPLOAD_URL = `${BACKEND_URL}/api/upload`;
 const DELETE_URL = `${BACKEND_URL}/api/files`;
 
