@@ -25,7 +25,7 @@ const PORT = process.env.PORT || 3001;
 // Enable CORS
 app.use(cors({
   origin: process.env.NODE_ENV === 'production' 
-    ? ['https://your-domain.com'] // Substitua pelo seu domínio em produção
+    ? ['https://tlcanva.vercel.app/'] // Substitua pelo seu domínio em produção
     : ['http://localhost:5173', 'http://localhost:5174'],
   credentials: true
 }));
