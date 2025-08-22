@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
+import { supabase } from '../contexts/supabaseClient';
 import { Tldraw, Editor, TldrawProps } from '@tldraw/tldraw';
 import { FileCardShapeUtil } from './FileCardShapeUtil';
 import { useFileHandlers } from '../hooks/useFileHandlers';
@@ -9,7 +10,14 @@ import { FileCardShape } from '../types';
 
 const customShapeUtils = [FileCardShapeUtil];
 
+// Função para obter o usuário logado (Supabase)
+async function getCurrentUser() {
+	const { data: { user } } = await supabase.auth.getUser();
+	return user;
+}
+
 export function Canvas(): React.ReactNode {
+	const [initialStore, setInitialStore] = useState<any | null>(null);
 	const [editor, setEditor] = useState<Editor | null>(null);
 	const [error, setError] = useState<string | null>(null);
 
@@ -87,11 +95,48 @@ const extractFilenameFromUrl = (url: string): string | null => {
 	}, [editor, fileHandlers.onFileDrop, fileHandlers.onUrlDrop, handleShapeDelete]);
 
 
-	const tldrawProps: TldrawProps = {
-		shapeUtils: customShapeUtils,
-		onMount: handleMount,
-		persistenceKey: 'tldraw-file-canvas-document',
-	};
+
+			// Carregar store salvo do usuário ao montar
+			useEffect(() => {
+				(async () => {
+					const user = await getCurrentUser();
+					if (!user) return;
+					const { data, error } = await supabase
+						.from('canvases')
+						.select('layout_data')
+						.eq('user_id', user.id)
+						.single();
+					if (data && data.layout_data) {
+						setInitialStore(data.layout_data);
+					}
+				})();
+			}, []);
+
+			// Salvar store serializado sempre que houver mudança
+			useEffect(() => {
+				if (!editor) return;
+				const saveListener = () => {
+					const storeData = editor.store.serialize();
+					(async () => {
+						const user = await getCurrentUser();
+						if (!user) return;
+						await supabase.from('canvases').upsert({
+							user_id: user.id,
+							layout_data: storeData,
+							updated_at: new Date().toISOString(),
+						});
+					})();
+				};
+				const unsubscribe = editor.store.listen(saveListener);
+				return () => unsubscribe();
+			}, [editor]);
+
+			const tldrawProps: TldrawProps = {
+				shapeUtils: customShapeUtils,
+				onMount: handleMount,
+				persistenceKey: undefined, // Desativa localStorage
+				initialData: initialStore || undefined,
+			};
 
 	return (
 		<div className="fixed inset-0">
