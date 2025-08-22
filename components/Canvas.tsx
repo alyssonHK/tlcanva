@@ -61,21 +61,37 @@ const extractFilenameFromUrl = (url: string): string | null => {
 };
 
 	const handleShapeDelete = useCallback(async (deletedShapes: FileCardShape[]) => {
+		// Remove shape do canvas imediatamente (já é feito pelo editor.deleteShapes)
+		// Salva novo layout sem as shapes deletadas
+		if (editor && deletedShapes.length > 0) {
+			const user = await getCurrentUser();
+			if (user) {
+				await supabase.from('canvases').upsert({
+					user_id: user.id,
+					layout_data: editor.store.serialize(),
+					updated_at: new Date().toISOString(),
+				});
+			}
+		}
+		// Exclui arquivos do Supabase em background
 		for (const shape of deletedShapes) {
 			if (shape.type === 'file-card' && shape.props.url) {
 				const filename = extractFilenameFromUrl(shape.props.url);
 				if (filename) {
-					try {
-						await deleteFile(filename);
-						console.log(`File ${filename} deleted from server`);
-					} catch (error) {
-						console.error('Error deleting file from server:', error);
-						// Não mostrar erro ao usuário para não atrapalhar a UX
-					}
+					deleteFile(filename)
+						.then(() => {
+							console.log(`File ${filename} deleted from server`);
+						})
+						.catch((error) => {
+							console.error('Error deleting file from server:', error);
+							if (typeof onError === 'function') {
+								onError('Erro ao excluir arquivo do servidor.');
+							}
+						});
 				}
 			}
 		}
-	}, []);
+	}, [editor, onError]);
 
 	const handleMount = (editor: Editor) => {
 		setEditor(editor);
@@ -203,12 +219,13 @@ const extractFilenameFromUrl = (url: string): string | null => {
 				return () => unsubscribe();
 			}, [editor]);
 
-				const tldrawProps: TldrawProps = {
-					shapeUtils: customShapeUtils,
-					onMount: handleMount,
-					persistenceKey: undefined, // Desativa localStorage
-					initialData: initialStore || undefined,
-				};
+					const tldrawProps: TldrawProps = {
+						shapeUtils: customShapeUtils,
+						onMount: handleMount,
+						persistenceKey: undefined, // Desativa localStorage
+						initialData: initialStore || undefined,
+						locale: 'en', // Força idioma inglês para evitar avisos de tradução
+					};
 
 				if (loading) {
 					return (

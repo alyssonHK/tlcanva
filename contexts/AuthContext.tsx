@@ -59,6 +59,22 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const logout = async () => {
     await supabase.auth.signOut();
+    setSession(null);
+    setUser(null);
+    // Limpa todos os itens do localStorage relacionados ao Supabase
+    try {
+      Object.keys(localStorage)
+        .filter((k) => k.toLowerCase().includes('supabase'))
+        .forEach((k) => localStorage.removeItem(k));
+    } catch {}
+    // Limpa cookies de sessão (se houver)
+    document.cookie.split(';').forEach(function(c) {
+      if (c.trim().toLowerCase().includes('supabase')) {
+        document.cookie = c.replace(/^ +/, '').replace(/=.*/, '=;expires=' + new Date().toUTCString() + ';path=/');
+      }
+    });
+    // Redireciona explicitamente para a tela de login
+    window.location.href = '/login';
   };
 
   const value: AuthContextType = {
