@@ -1,4 +1,5 @@
 import { UploadedFile } from '../types';
+import { supabase } from '../contexts/supabaseClient';
 
 const BACKEND_URL = import.meta.env.VITE_BACKEND_URL || '';
 const UPLOAD_URL = `${BACKEND_URL}/api/upload`;
@@ -9,7 +10,9 @@ export async function uploadFile(file: File): Promise<UploadedFile> {
   formData.append('file', file);
 
   // Obter token do localStorage
-  const token = localStorage.getItem('auth_token');
+    // Obter token do Supabase (sempre atualizado)
+    const { data: { session } } = await supabase.auth.getSession();
+    const token = session?.access_token;
   
   const headers: HeadersInit = {};
   if (token) {
@@ -47,7 +50,9 @@ export async function uploadFile(file: File): Promise<UploadedFile> {
 
 export async function deleteFile(filename: string): Promise<void> {
   // Obter token do localStorage
-  const token = localStorage.getItem('auth_token');
+    // Obter token do Supabase (sempre atualizado)
+    const { data: { session } } = await supabase.auth.getSession();
+    const token = session?.access_token;
   
   const headers: HeadersInit = {
     'Content-Type': 'application/json',
