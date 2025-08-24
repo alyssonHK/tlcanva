@@ -50,6 +50,7 @@ export class FileCardShapeUtil extends BaseBoxShapeUtil<FileCardShape> {
 					backgroundColor: '#2D3748',
 					border: '1px solid #4A5568',
 					borderRadius: '8px',
+					pointerEvents: 'all',
 				}}
 			>
 				<FileCard

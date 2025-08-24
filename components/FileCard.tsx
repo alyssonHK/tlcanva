@@ -1,6 +1,8 @@
 import React, { useState } from 'react';
 import { getFileIcon } from '../utils/files';
 import { formatBytes } from '../utils/files';
+import { InteractiveVideo } from './InteractiveVideo';
+import { InteractivePDF } from './InteractivePDF';
 
 interface FileCardProps {
 	url: string;
@@ -75,18 +77,16 @@ export const FileCard: React.FC<FileCardProps> = ({ url, fileName, fileType, fil
 			);
 		}
 
-		// Vídeos
+		// Vídeos - Agora com componente interativo
 		if (fileType.startsWith('video/')) {
 			return (
 				<div className="w-full h-full overflow-hidden rounded">
-					<video
-						src={url}
-						controls
-						className="w-full h-full object-cover"
-						style={{ minHeight: '200px' }}
-					>
-						Seu navegador não suporta vídeos.
-					</video>
+					<InteractiveVideo
+						url={url}
+						fileName={fileName}
+						width={400}
+						height={300}
+					/>
 				</div>
 			);
 		}
@@ -105,15 +105,15 @@ export const FileCard: React.FC<FileCardProps> = ({ url, fileName, fileType, fil
 			);
 		}
 
-		// PDFs
+		// PDFs - Agora com componente interativo
 		if (fileType === 'application/pdf') {
 			return (
 				<div className="w-full h-full overflow-hidden rounded">
-					<iframe
-						src={url}
-						className="w-full h-full border-0"
-						style={{ minHeight: '400px' }}
-						title={fileName}
+					<InteractivePDF
+						url={url}
+						fileName={fileName}
+						width={500}
+						height={400}
 					/>
 				</div>
 			);
@@ -137,7 +137,13 @@ export const FileCard: React.FC<FileCardProps> = ({ url, fileName, fileType, fil
 	// Se tem preview e está mostrando o preview, renderiza o conteúdo do arquivo
 	if (hasPreview && showPreview && !isUploading) {
 		return (
-			<div className="w-full h-full flex flex-col">
+			<div 
+				className="w-full h-full flex flex-col"
+				onPointerDown={(e) => e.stopPropagation()} // Impede interferência do TLDraw
+				onPointerUp={(e) => e.stopPropagation()}
+				onPointerMove={(e) => e.stopPropagation()}
+				onClick={(e) => e.stopPropagation()}
+			>
 				{/* Header com nome do arquivo e ações, fora do preview */}
 				<div className="w-full flex items-center justify-between px-2 pt-2 pb-1 bg-gray-800">
 					<div className="flex flex-col flex-grow min-w-0">
