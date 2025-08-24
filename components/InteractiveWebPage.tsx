@@ -14,6 +14,7 @@ export const InteractiveWebPage: React.FC<InteractiveWebPageProps> = ({ url, wid
   const [isSameOrigin, setIsSameOrigin] = useState(false);
   const [embedAllowed, setEmbedAllowed] = useState(false);
   const [infoResolved, setInfoResolved] = useState(false);
+  const [proxyOk, setProxyOk] = useState<null | boolean>(null);
   const iframeRef = useRef<HTMLIFrameElement>(null);
 
   // Tenta buscar título e favicon da página
@@ -46,10 +47,18 @@ export const InteractiveWebPage: React.FC<InteractiveWebPageProps> = ({ url, wid
             if (finalOrigin === (typeof window !== 'undefined' ? window.location.origin : '')) {
               setIsSameOrigin(true);
             }
-            // Se o domínio for github.com (exemplo), permitimos embed relaxado
-            const hostname = new URL(data.finalUrl).hostname.replace(/^www\./, '');
-            if (['github.com'].includes(hostname)) {
-              setEmbedAllowed(true);
+            // If the proxy indicates framing is forbidden, do not allow embedding even if whitelisted
+            if (data.frameAllowed === false) {
+              setEmbedAllowed(false);
+            }
+            // Buscar whitelist dinâmica do backend e decidir se embed é permitido
+            const wlResp = await fetch('/api/embed/whitelist');
+            if (wlResp && wlResp.ok) {
+              const wlData = await wlResp.json();
+              const hostname = new URL(data.finalUrl).hostname.replace(/^www\./, '');
+              if (Array.isArray(wlData.whitelist) && wlData.whitelist.includes(hostname) && data.frameAllowed !== false) {
+                setEmbedAllowed(true);
+              }
             }
           } catch (e) {
             // ignore
@@ -71,6 +80,24 @@ export const InteractiveWebPage: React.FC<InteractiveWebPageProps> = ({ url, wid
     setIframeError(true);
   };
 
+  // Antes de montar o iframe, sondar o proxy para ver se a página pode ser recuperada
+  useEffect(() => {
+    let mounted = true;
+    (async () => {
+      if (!infoResolved) return;
+      try {
+        const proxiedUrl = `${(typeof window !== 'undefined' && window.location.hostname === 'localhost') ? 'http://localhost:3000' : ''}/api/proxy?url=${encodeURIComponent(url)}${embedAllowed ? '&embed=1' : ''}`;
+        const resp = await fetch(proxiedUrl, { method: 'GET' });
+        if (!mounted) return;
+        const ct = resp.headers.get('content-type') || '';
+        setProxyOk(resp.ok && ct.includes('text/html'));
+      } catch (e) {
+        if (mounted) setProxyOk(false);
+      }
+    })();
+    return () => { mounted = false; };
+  }, [infoResolved, embedAllowed, url]);
+
   return (
     <div style={{ width, height, border: '1.5px solid #a78bfa', borderRadius: 12, overflow: 'hidden', background: '#18181b', display: 'flex', flexDirection: 'column' }}>
       {/* Header estilo Obsidian */}
@@ -83,12 +110,12 @@ export const InteractiveWebPage: React.FC<InteractiveWebPageProps> = ({ url, wid
       </div>
       {/* Conteúdo */}
       <div style={{ flex: 1, background: '#fff', position: 'relative' }}>
-        {/* Espera a checagem do proxy/info terminar para decidir como montar o iframe */}
-        { !infoResolved ? (
+    {/* Espera a checagem do proxy/info terminar e a sondagem do proxy completar para decidir como montar o iframe */}
+    { (!infoResolved || proxyOk === null) ? (
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%', color: '#444' }}>
             <div>Carregando pré-visualização...</div>
           </div>
-        ) : (iframeError || isSameOrigin) ? (
+  ) : (iframeError || isSameOrigin || proxyOk === false) ? (
           <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100%', color: '#444', padding: 16 }}>
             <div style={{ fontSize: 32, marginBottom: 8 }}>⚠️</div>
             <div style={{ fontWeight: 500, marginBottom: 4 }}>{isSameOrigin ? 'Conteúdo interno — abrindo como link para evitar canvas aninhado.' : 'Este site não permite ser exibido no canvas.'}</div>

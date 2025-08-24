@@ -132,11 +132,20 @@ export function useFileHandlers(editor: Editor | null, onError: (message: string
 												const urlObj = new URL(url);
 												const currentOrigin = typeof window !== 'undefined' ? window.location.origin : '';
 
-												// Domínios permitidos para embed direto no canvas
-												const WHITELIST_DOMAINS = [
-													'github.com',
-													// adicione outros domínios confiáveis aqui
-												];
+												// Busca a whitelist dinâmica do backend para decidir se o domínio pode ser embutido
+												let WHITELIST_DOMAINS: string[] = ['github.com'];
+												try {
+													const wlResp = await fetch('/api/embed/whitelist');
+													if (wlResp && wlResp.ok) {
+														const wlData = await wlResp.json();
+														if (Array.isArray(wlData.whitelist)) {
+															WHITELIST_DOMAINS = wlData.whitelist.map((s: string) => s.replace(/^www\./, '').trim());
+														}
+													}
+												} catch (e) {
+													// fallback para lista padrão
+													WHITELIST_DOMAINS = ['github.com'];
+												}
 
 												// Consulta a URL final via proxy info para resolver redirects
 												let finalUrl = url;
