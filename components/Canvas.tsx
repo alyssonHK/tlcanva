@@ -2,13 +2,30 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { supabase } from '../contexts/supabaseClient';
 import { Tldraw, Editor, TldrawProps, createShapeId } from '@tldraw/tldraw';
 import { FileCardShapeUtil } from './FileCardShapeUtil';
+import { WebPageShapeUtil } from './WebPageShapeUtil';
 import { useFileHandlers } from '../hooks/useFileHandlers';
 import { Toast } from './Toast';
 import { Header } from './Header';
 import { deleteFile } from '../services/uploadService';
 import { FileCardShape } from '../types';
 
-const customShapeUtils = [FileCardShapeUtil];
+const customShapeUtils = [FileCardShapeUtil, WebPageShapeUtil];
+// Utilitário para criar shape de página web
+function makeWebPageShape({ url }, idx = 0) {
+	return {
+		id: createShapeId(),
+		type: 'web-page',
+		x: 120 + idx * 40,
+		y: 120 + idx * 40,
+		props: {
+			w: 600,
+			h: 400,
+			url,
+		},
+	};
+}
+
+
 
 // Utilitário para criar shape de arquivo
 function makeFileCardShape({ url, name, mimeType, size }, idx = 0) {

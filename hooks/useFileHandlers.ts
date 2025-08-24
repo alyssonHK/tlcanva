@@ -125,24 +125,40 @@ export function useFileHandlers(editor: Editor | null, onError: (message: string
 					},
 				]);
 			} else {
-				// If it's not an embeddable URL, create a file card for it.
-				const linkDimensions = getFileDimensions('link', url);
-				editor.createShapes([
-					{
-						type: FILE_CARD_TYPE,
-						x: point.x,
-						y: point.y,
-						props: {
-							w: linkDimensions.w,
-							h: linkDimensions.h,
-							url: url,
-							fileName: url,
-							fileType: 'link',
-							fileSize: 0,
-							assetId: null,
-						},
-					},
-				]);
+							// Se for uma URL http(s), criar shape do tipo 'web-page' para iframe interativo
+							if (/^https?:\/\//.test(url)) {
+								editor.createShapes([
+									{
+										type: 'web-page',
+										x: point.x,
+										y: point.y,
+										props: {
+											w: 600,
+											h: 400,
+											url: url,
+										},
+									},
+								]);
+							} else {
+								// fallback: file-card para outros links
+								const linkDimensions = getFileDimensions('link', url);
+								editor.createShapes([
+									{
+										type: FILE_CARD_TYPE,
+										x: point.x,
+										y: point.y,
+										props: {
+											w: linkDimensions.w,
+											h: linkDimensions.h,
+											url: url,
+											fileName: url,
+											fileType: 'link',
+											fileSize: 0,
+											assetId: null,
+										},
+									},
+								]);
+							}
 			}
 		},
 		[editor]
