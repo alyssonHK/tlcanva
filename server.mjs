@@ -105,22 +105,44 @@ app.get('/api/proxy', async (req, res) => {
   const hostname = new URL(targetUrl).hostname.replace(/^www\./, '');
   const allowScripts = embedFlag && whitelist.includes(hostname);
   console.log('[proxy] targetUrl=', targetUrl, 'hostname=', hostname, 'embedFlag=', embedFlag, 'allowScripts=', allowScripts);
+  // Remove scripts quando não permitido
   if (!allowScripts) {
     // Remover scripts para evitar que código remoto execute dentro do iframe proxied
     $('script').remove();
   }
-    // Remove qualquer tag <base> existente e injeta a nova
-    const urlObj = new URL(targetUrl);
-    const baseHref = `${urlObj.protocol}//${urlObj.host}`;
-    $('head base').remove();
-    $('head').prepend(`<base href="${baseHref}">`);
+
+  // Resolve baseHref a partir do target antes de operar substituições que dependem dele
+  const urlObj = new URL(targetUrl);
+  const baseHref = `${urlObj.protocol}//${urlObj.host}`;
+
+  // Sempre remover referências a ferramentas de desenvolvimento locais (Vite client, qualquer porta localhost)
+  // Mesmo quando allowScripts=true, esses scripts apontam para seu ambiente de dev e causam CORS / comportamento inesperado
+  $('script[src*="@vite"]').remove();
+  // remove scripts/links que apontam para qualquer localhost:port
+  $('script[src*="localhost:"]').remove();
+  $('link[href*="localhost:"]').remove();
+
+  // Remove qualquer tag <base> existente e injeta a nova
+  $('head base').remove();
+  $('head').prepend(`<base href="${baseHref}">`);
+
+  // Agora gera o HTML final a partir do DOM modificado e aplica substituições finais
+  let proxiedHtml = $.html();
+  try {
+    // Substituir referências a http://localhost:PORT ou https://localhost:PORT
+    proxiedHtml = proxiedHtml.replace(/https?:\/\/localhost:\d+/g, baseHref);
+    // Remover paths do Vite dev client que possam existir
+    proxiedHtml = proxiedHtml.replace(/\/@vite/g, '/');
+  } catch (e) {
+    // se replace falhar por algum motivo, ignoramos e enviamos o html gerado pelo cheerio
+  }
 
     // Opcional: rewrite relative src/href attributes? base should handle most cases.
 
-    // Enviar HTML modificado como resposta (mesma origem do seu backend)
-    res.set('Content-Type', 'text/html; charset=utf-8');
-  console.log('[proxy] sending proxied html for', targetUrl, 'allowScripts=', allowScripts);
-    res.send($.html());
+      // Enviar HTML modificado como resposta (mesma origem do seu backend)
+      res.set('Content-Type', 'text/html; charset=utf-8');
+    console.log('[proxy] sending proxied html for', targetUrl, 'allowScripts=', allowScripts);
+      res.send(proxiedHtml);
   } catch (error) {
     console.error('Erro no proxy:', error && error.toString ? error.toString() : error);
     res.status(500).send(`<h1>Erro ao carregar a página: ${String(targetUrl)}</h1>`);

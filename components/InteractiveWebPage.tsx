@@ -98,7 +98,8 @@ export const InteractiveWebPage: React.FC<InteractiveWebPageProps> = ({ url, wid
           <iframe
             ref={iframeRef}
             // Usa o proxy para contornar CORS/X-Frame quando possível; embedAllowed ativa embed mais completo
-            src={`/api/proxy?url=${encodeURIComponent(url)}${embedAllowed ? '&embed=1' : ''}`}
+            // Em dev, apontar diretamente para o backend (porta 3000) para evitar que o Vite dev server injete o client HMR (/@vite/client)
+            src={`${(typeof window !== 'undefined' && window.location.hostname === 'localhost') ? 'http://localhost:3000' : ''}/api/proxy?url=${encodeURIComponent(url)}${embedAllowed ? '&embed=1' : ''}`}
             width="100%"
             height="100%"
             style={{ border: 'none', minHeight: 120 }}
