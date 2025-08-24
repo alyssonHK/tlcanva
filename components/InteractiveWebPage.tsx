@@ -75,8 +75,9 @@ export const InteractiveWebPage: React.FC<InteractiveWebPageProps> = ({ url, wid
     <div style={{ width, height, border: '1.5px solid #a78bfa', borderRadius: 12, overflow: 'hidden', background: '#18181b', display: 'flex', flexDirection: 'column' }}>
       {/* Header estilo Obsidian */}
       <div style={{ display: 'flex', alignItems: 'center', background: '#23232b', padding: '6px 12px', borderBottom: '1px solid #333', gap: 8 }}>
-        {favicon && <img src={favicon} alt="favicon" style={{ width: 18, height: 18, marginRight: 6, borderRadius: 3 }} />}
-        <span style={{ color: '#fff', fontWeight: 500, fontSize: 14, flex: 1, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }} title={title}>{title || url}</span>
+  {favicon && <img src={favicon} alt="favicon" style={{ width: 18, height: 18, marginRight: 6, borderRadius: 3 }} />}
+  <span style={{ color: '#fff', fontWeight: 500, fontSize: 14, flex: 1, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }} title={title}>{title || url}</span>
+  <div style={{ fontSize: 11, color: '#9ca3af', marginLeft: 8 }}>{embedAllowed ? 'embed=allowed' : 'embed=denied'}</div>
         <a href={url} target="_blank" rel="noopener noreferrer" style={{ color: '#a78bfa', fontSize: 15, marginLeft: 8, textDecoration: 'none' }} title="Abrir em nova aba">🔗</a>
         <div style={{ marginLeft: 8, fontSize: 11, color: '#9ca3af' }} title="Conteúdo sem scripts para segurança">(sandboxed)</div>
       </div>

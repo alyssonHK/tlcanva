@@ -10,6 +10,7 @@ import multer from 'multer';
 import axios from 'axios';
 import { load as cheerioLoad } from 'cheerio';
 import { createClient } from '@supabase/supabase-js';
+import { fileURLToPath } from 'url';
 
 const app = express();
 // Use o ANON KEY por padrão em desenvolvimento. Se precisar de privilégios administrativos
@@ -103,6 +104,7 @@ app.get('/api/proxy', async (req, res) => {
   const whitelist = ['github.com'];
   const hostname = new URL(targetUrl).hostname.replace(/^www\./, '');
   const allowScripts = embedFlag && whitelist.includes(hostname);
+  console.log('[proxy] targetUrl=', targetUrl, 'hostname=', hostname, 'embedFlag=', embedFlag, 'allowScripts=', allowScripts);
   if (!allowScripts) {
     // Remover scripts para evitar que código remoto execute dentro do iframe proxied
     $('script').remove();
@@ -117,6 +119,7 @@ app.get('/api/proxy', async (req, res) => {
 
     // Enviar HTML modificado como resposta (mesma origem do seu backend)
     res.set('Content-Type', 'text/html; charset=utf-8');
+  console.log('[proxy] sending proxied html for', targetUrl, 'allowScripts=', allowScripts);
     res.send($.html());
   } catch (error) {
     console.error('Erro no proxy:', error && error.toString ? error.toString() : error);
@@ -144,11 +147,26 @@ app.get('/api/proxy/info', async (req, res) => {
 
     // Tenta extrair a URL final (após redirects). Nem sempre disponível, então fallback para a URL fornecida.
     const finalUrl = (response.request && response.request.res && response.request.res.responseUrl) || targetUrl;
-    res.json({ ok: true, finalUrl });
+  console.log('[proxy/info] resolved finalUrl=', finalUrl, 'for target=', targetUrl);
+  res.json({ ok: true, finalUrl });
   } catch (error) {
     console.error('Erro no proxy info:', error && error.toString ? error.toString() : error);
     res.status(500).json({ ok: false, message: 'Erro ao consultar destino.' });
   }
 });
+
+// Se for executado diretamente (node server.mjs), inicia o listener.
+const PORT = process.env.PORT || 3000;
+try {
+  const isMain = fileURLToPath(import.meta.url) === process.argv[1];
+  if (isMain) {
+    app.listen(PORT, () => console.log(`[server] listening on http://localhost:${PORT}`));
+  }
+} catch (e) {
+  // Ambiente que não suporta fileURLToPath/argv comparações — apenas iniciar de qualquer forma
+  if (process.env.NODE_ENV !== 'test') {
+    app.listen(PORT, () => console.log(`[server] listening on http://localhost:${PORT}`));
+  }
+}
 
 export default app;
