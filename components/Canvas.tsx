@@ -232,52 +232,52 @@ export function Canvas(): React.ReactNode {
 	}, []);
 
 	// Após montar o editor, sincronizar arquivos do bucket com shapes do canvas
-	useEffect(() => {
-		if (!editor) return;
-		(async () => {
-			const { data: filesData } = await supabase.storage.from('uploads').list('', { limit: 100 });
-			if (!filesData || !Array.isArray(filesData)) return;
-			// Filtrar placeholder 'empty folder'
-			const realFiles = filesData.filter(f => f.name && f.name !== '.emptyFolderPlaceholder');
-			// Mapear URLs já presentes no canvas (apenas file-card)
-			const shapes = editor.getCurrentPageShapes();
-			const urlsInLayout = new Set(
-				shapes
-					.filter(s => s.type === 'file-card')
-					.map(s => (s as FileCardShape).props.url)
-			);
-			// Adicionar shapes para arquivos não referenciados
-			let added = false;
-			for (let i = 0; i < realFiles.length; i++) {
-				const file = realFiles[i];
-				if (!file.name) continue;
-				const { data: publicUrlData } = supabase.storage.from('uploads').getPublicUrl(file.name);
-				if (!urlsInLayout.has(publicUrlData.publicUrl)) {
-					// Criar shape usando a API do editor
-					editor.createShapes([
-						makeFileCardShape({
-							url: publicUrlData.publicUrl,
-							name: file.name,
-							mimeType: file.metadata?.mimetype || '',
-							size: file.metadata?.size || 0,
-						}, i)
-					]);
-					added = true;
-				}
-			}
-			// Se shapes foram adicionadas, salvar novo layout
-			if (added) {
+		useEffect(() => {
+			if (!editor) return;
+			(async () => {
 				const user = await getCurrentUser();
-				if (user) {
+				if (!user) return;
+				// Listar arquivos apenas da pasta do usuário
+				const { data: filesData } = await supabase.storage.from('uploads').list(user.id + '/', { limit: 100 });
+				if (!filesData || !Array.isArray(filesData)) return;
+				// Filtrar placeholder 'empty folder'
+				const realFiles = filesData.filter(f => f.name && f.name !== '.emptyFolderPlaceholder');
+				// Mapear URLs já presentes no canvas (apenas file-card)
+				const shapes = editor.getCurrentPageShapes();
+				const urlsInLayout = new Set(
+					shapes
+						.filter(s => s.type === 'file-card')
+						.map(s => (s as FileCardShape).props.url)
+				);
+				// Adicionar shapes para arquivos não referenciados
+				let added = false;
+				for (let i = 0; i < realFiles.length; i++) {
+					const file = realFiles[i];
+					if (!file.name) continue;
+					const { data: publicUrlData } = supabase.storage.from('uploads').getPublicUrl(user.id + '/' + file.name);
+					if (!urlsInLayout.has(publicUrlData.publicUrl)) {
+						// Criar shape usando a API do editor
+						editor.createShapes([
+							makeFileCardShape({
+								url: publicUrlData.publicUrl,
+								name: file.name,
+								mimeType: file.metadata?.mimetype || '',
+								size: file.metadata?.size || 0,
+							}, i)
+						]);
+						added = true;
+					}
+				}
+				// Se shapes foram adicionadas, salvar novo layout
+				if (added) {
 					await supabase.from('canvases').upsert({
 						user_id: user.id,
 						layout_data: editor.store.serialize(),
 						updated_at: new Date().toISOString(),
 					});
 				}
-			}
-		})();
-	}, [editor]);
+			})();
+		}, [editor]);
 
 	// Salvar store serializado sempre que houver mudança (com debounce)
 	useEffect(() => {

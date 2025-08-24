@@ -1,6 +1,12 @@
 import { UploadedFile } from '../types';
 import { supabase } from '../contexts/supabaseClient';
 
+// Função para obter o usuário logado (Supabase)
+async function getCurrentUser() {
+  const { data: { user } } = await supabase.auth.getUser();
+  return user;
+}
+
 // const BACKEND_URL = import.meta.env.VITE_BACKEND_URL || '';
 // const UPLOAD_URL = `${BACKEND_URL}/api/upload`;
 // const DELETE_URL = `${BACKEND_URL}/api/files`;
@@ -17,13 +23,12 @@ function sanitizeFileName(name: string): string {
 }
 
 export async function uploadFile(file: File): Promise<UploadedFile> {
-  const formData = new FormData();
-  formData.append('file', file);
+  const user = await getCurrentUser();
+  if (!user) throw new Error('Usuário não autenticado');
 
-  // Upload direto para o Supabase Storage
-  const fileExt = file.name.split('.').pop();
   const sanitizedFileName = sanitizeFileName(file.name);
-  const filePath = `${Date.now()}-${sanitizedFileName}`;
+  // Salva o arquivo na pasta do usuário
+  const filePath = `${user.id}/${Date.now()}-${sanitizedFileName}`;
   const { data, error } = await supabase.storage.from('uploads').upload(filePath, file, {
     cacheControl: '3600',
     upsert: false,
