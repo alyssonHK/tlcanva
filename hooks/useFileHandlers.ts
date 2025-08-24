@@ -104,7 +104,7 @@ export function useFileHandlers(editor: Editor | null, onError: (message: string
 	);
 
 	const onUrlDrop = useCallback(
-		(info: TLExternalContent) => {
+		async (info: TLExternalContent) => {
 			if (!editor || info.type !== 'url') return;
 			const point = info.point ?? editor.getViewportScreenCenter();
 			const { url } = info;
@@ -125,21 +125,108 @@ export function useFileHandlers(editor: Editor | null, onError: (message: string
 					},
 				]);
 			} else {
-							// Se for uma URL http(s), criar shape do tipo 'web-page' para iframe interativo
-							if (/^https?:\/\//.test(url)) {
-								editor.createShapes([
-									{
-										type: 'web-page',
-										x: point.x,
-										y: point.y,
-										props: {
-											w: 600,
-											h: 400,
-											url: url,
-										},
-									},
-								]);
-							} else {
+										// Se for uma URL http(s), por padrão criamos um file-card. Apenas criamos um 'web-page'
+										// (embed direto no canvas) se o domínio estiver na whitelist e a URL final não for same-origin.
+										if (/^https?:\/\//.test(url)) {
+											try {
+												const urlObj = new URL(url);
+												const currentOrigin = typeof window !== 'undefined' ? window.location.origin : '';
+
+												// Domínios permitidos para embed direto no canvas
+												const WHITELIST_DOMAINS = [
+													'github.com',
+													// adicione outros domínios confiáveis aqui
+												];
+
+												// Consulta a URL final via proxy info para resolver redirects
+												let finalUrl = url;
+												try {
+													const resp = await fetch(`/api/proxy/info?url=${encodeURIComponent(url)}`);
+													if (resp.ok) {
+														const data = await resp.json();
+														if (data && data.finalUrl) finalUrl = data.finalUrl;
+													}
+												} catch (err) {
+													// ignore, fallback para a URL original
+												}
+
+												const finalOrigin = new URL(finalUrl).origin;
+												const finalHostname = new URL(finalUrl).hostname.replace(/^www\./, '');
+
+												// Se a URL final for same-origin ao app, criamos um file-card (evita canvas dentro do canvas)
+												if (finalOrigin === currentOrigin) {
+													const linkDimensions = getFileDimensions('link', url);
+													editor.createShapes([
+														{
+															type: FILE_CARD_TYPE,
+															x: point.x,
+															y: point.y,
+															props: {
+																w: linkDimensions.w,
+																h: linkDimensions.h,
+																url: url,
+																fileName: url,
+																fileType: 'link',
+																fileSize: 0,
+																assetId: null,
+															},
+														},
+													]);
+												} else if (WHITELIST_DOMAINS.includes(finalHostname)) {
+													// Se o domínio final estiver na whitelist, criamos um web-page embutido
+													editor.createShapes([
+														{
+															type: 'web-page',
+															x: point.x,
+															y: point.y,
+															props: {
+																w: 600,
+																h: 400,
+																url: finalUrl,
+															},
+														},
+													]);
+												} else {
+													// Fallback: criar file-card para links não confiáveis
+													const linkDimensions = getFileDimensions('link', url);
+													editor.createShapes([
+														{
+															type: FILE_CARD_TYPE,
+															x: point.x,
+															y: point.y,
+															props: {
+																w: linkDimensions.w,
+																h: linkDimensions.h,
+																url: url,
+																fileName: url,
+																fileType: 'link',
+																fileSize: 0,
+																assetId: null,
+															},
+														},
+													]);
+												}
+											} catch (e) {
+												// Se URL inválida por algum motivo, fallback para file-card
+												const linkDimensions = getFileDimensions('link', url);
+												editor.createShapes([
+													{
+														type: FILE_CARD_TYPE,
+														x: point.x,
+														y: point.y,
+														props: {
+															w: linkDimensions.w,
+															h: linkDimensions.h,
+															url: url,
+															fileName: url,
+															fileType: 'link',
+															fileSize: 0,
+															assetId: null,
+														},
+													},
+												]);
+											}
+										} else {
 								// fallback: file-card para outros links
 								const linkDimensions = getFileDimensions('link', url);
 								editor.createShapes([

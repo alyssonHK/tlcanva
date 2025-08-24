@@ -7,6 +7,8 @@ import dotenv from 'dotenv';
 dotenv.config({ path: '.env.local' });
 import cors from 'cors';
 import multer from 'multer';
+import axios from 'axios';
+import { load as cheerioLoad } from 'cheerio';
 import { createClient } from '@supabase/supabase-js';
 
 const app = express();
@@ -69,6 +71,84 @@ app.post('/api/upload', authenticateSupabaseToken, upload.single('file'), async 
     const { data: { publicUrl } } = supabase.storage.from('uploads').getPublicUrl(data.path);
 
     res.json({ success: true, url: publicUrl, name: req.file.originalname, mimeType: req.file.mimetype, size: req.file.size });
+});
+
+// ROTA DE PROXY PARA PÁGINAS WEB
+app.get('/api/proxy', async (req, res) => {
+  const targetUrl = req.query.url;
+
+  if (!targetUrl || typeof targetUrl !== 'string') {
+    return res.status(400).send('<h1>URL de destino não fornecida.</h1>');
+  }
+
+  try {
+    const response = await axios.get(targetUrl, {
+      responseType: 'text',
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
+      },
+      // timeout: 10000,
+    });
+
+    const html = response.data;
+  const $ = cheerioLoad(html);
+
+    // Remove tags que podem bloquear o iframe ou causar problemas
+    $('meta[http-equiv="Content-Security-Policy"]').remove();
+    $('meta[http-equiv="X-Frame-Options"]').remove();
+  // Remover meta refresh que poderia redirecionar o iframe para outra origem
+  $('meta[http-equiv="refresh"]').remove();
+  // Decidir se mantemos scripts: se query.embed=1 e domínio está na whitelist, mantemos scripts
+  const embedFlag = req.query.embed === '1';
+  const whitelist = ['github.com'];
+  const hostname = new URL(targetUrl).hostname.replace(/^www\./, '');
+  const allowScripts = embedFlag && whitelist.includes(hostname);
+  if (!allowScripts) {
+    // Remover scripts para evitar que código remoto execute dentro do iframe proxied
+    $('script').remove();
+  }
+    // Remove qualquer tag <base> existente e injeta a nova
+    const urlObj = new URL(targetUrl);
+    const baseHref = `${urlObj.protocol}//${urlObj.host}`;
+    $('head base').remove();
+    $('head').prepend(`<base href="${baseHref}">`);
+
+    // Opcional: rewrite relative src/href attributes? base should handle most cases.
+
+    // Enviar HTML modificado como resposta (mesma origem do seu backend)
+    res.set('Content-Type', 'text/html; charset=utf-8');
+    res.send($.html());
+  } catch (error) {
+    console.error('Erro no proxy:', error && error.toString ? error.toString() : error);
+    res.status(500).send(`<h1>Erro ao carregar a página: ${String(targetUrl)}</h1>`);
+  }
+});
+
+// ROTA QUE RETORNA INFORMAÇÕES SOBRE O DESTINO (útil para detectar redirects que apontam para a mesma origem)
+app.get('/api/proxy/info', async (req, res) => {
+  const targetUrl = req.query.url;
+  if (!targetUrl || typeof targetUrl !== 'string') {
+    return res.status(400).json({ ok: false, message: 'URL de destino não fornecida.' });
+  }
+
+  try {
+    // Faz um GET simples (seguindo redirects) e retorna a URL final observada pelo request
+    const response = await axios.get(targetUrl, {
+      responseType: 'text',
+      maxRedirects: 5,
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
+      },
+      // timeout: 5000,
+    });
+
+    // Tenta extrair a URL final (após redirects). Nem sempre disponível, então fallback para a URL fornecida.
+    const finalUrl = (response.request && response.request.res && response.request.res.responseUrl) || targetUrl;
+    res.json({ ok: true, finalUrl });
+  } catch (error) {
+    console.error('Erro no proxy info:', error && error.toString ? error.toString() : error);
+    res.status(500).json({ ok: false, message: 'Erro ao consultar destino.' });
+  }
 });
 
 export default app;

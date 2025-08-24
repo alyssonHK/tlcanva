@@ -16,6 +16,7 @@ export const FileCard: React.FC<FileCardProps> = ({ url, fileName, fileType, fil
 	const formattedSize = formatBytes(fileSize);
 	const icon = getFileIcon(fileType, fileName);
 	const [showPreview, setShowPreview] = useState(true);
+	const [showModal, setShowModal] = useState(false);
 	const [imageError, setImageError] = useState(false);
 
 	const handleActionClick = (e: React.MouseEvent<HTMLAnchorElement>) => {
@@ -29,6 +30,11 @@ export const FileCard: React.FC<FileCardProps> = ({ url, fileName, fileType, fil
 	const togglePreview = (e: React.MouseEvent) => {
 		e.preventDefault();
 		e.stopPropagation();
+		// Para links, abrimos um modal top-level ao invés de renderizar um iframe dentro do canvas
+		if (fileType === 'link') {
+			setShowModal(true);
+			return;
+		}
 		setShowPreview(!showPreview);
 	};
 
@@ -137,6 +143,7 @@ export const FileCard: React.FC<FileCardProps> = ({ url, fileName, fileType, fil
 	// Se tem preview e está mostrando o preview, renderiza o conteúdo do arquivo
 	if (hasPreview && showPreview && !isUploading) {
 		return (
+			<>
 			<div className="w-full h-full flex flex-col">
 				{/* Header com nome do arquivo e ações, fora do preview */}
 				<div
@@ -185,6 +192,33 @@ export const FileCard: React.FC<FileCardProps> = ({ url, fileName, fileType, fil
 					{fileContent}
 				</div>
 			</div>
+			{/* Modal top-level para links, posicionado fixed para ficar fora da área do canvas */}
+			{showModal && (
+				<div
+					style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)', zIndex: 9999, display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+					onClick={(e) => { e.stopPropagation(); setShowModal(false); }}
+				>
+					<div style={{ width: '90%', height: '90%', background: '#111', borderRadius: 8, overflow: 'hidden', display: 'flex', flexDirection: 'column' }} onClick={(e) => e.stopPropagation()}>
+						<div style={{ display: 'flex', alignItems: 'center', padding: '8px 12px', background: '#1f2937', color: '#fff', gap: 8 }}>
+							<span style={{ fontSize: 13, fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{fileName}</span>
+							<div style={{ marginLeft: 'auto' }}>
+								<button onClick={() => setShowModal(false)} style={{ background: '#ef4444', color: '#fff', borderRadius: 6, padding: '6px 10px', border: 'none', cursor: 'pointer' }}>Fechar</button>
+							</div>
+						</div>
+						<div style={{ flex: 1, background: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}>
+							<div style={{ textAlign: 'center', color: '#333' }}>
+								<p style={{ fontSize: 16, fontWeight: 600, marginBottom: 8 }}>Visualização externa</p>
+								<p style={{ marginBottom: 12, color: '#555' }}>Por segurança, esta visualização foi aberta fora do canvas. Abra em uma nova aba para ver o site completo.</p>
+								<div style={{ display: 'flex', gap: 8, justifyContent: 'center' }}>
+									<button onClick={() => window.open(url, '_blank')} style={{ background: '#2563eb', color: '#fff', border: 'none', padding: '8px 12px', borderRadius: 6, cursor: 'pointer' }}>Abrir em nova aba</button>
+									<button onClick={() => setShowModal(false)} style={{ background: '#e5e7eb', color: '#111827', border: 'none', padding: '8px 12px', borderRadius: 6, cursor: 'pointer' }}>Fechar</button>
+								</div>
+							</div>
+						</div>
+					</div>
+				</div>
+			)}
+			</>
 		);
 	}
 

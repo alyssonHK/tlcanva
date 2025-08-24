@@ -131,6 +131,62 @@ export function Canvas(): React.ReactNode {
 
 	const handleMount = (editor: Editor) => {
 		setEditor(editor);
+
+		// Migração: converter shapes antigas do tipo 'web-page' que apontam para
+		// a mesma origem da aplicação em 'file-card' para evitar um canvas dentro do canvas.
+		(async () => {
+			try {
+				const shapes = editor.getCurrentPageShapes();
+				const webPageShapes = shapes.filter(s => s.type === 'web-page');
+				if (webPageShapes.length === 0) return;
+				const currentOrigin = typeof window !== 'undefined' ? window.location.origin : '';
+				let changed = false;
+				for (const s of webPageShapes) {
+					const url = (s as any).props?.url;
+					if (!url) continue;
+					try {
+						const urlObj = new URL(url);
+						if (urlObj.origin === currentOrigin) {
+							// Criar um file-card no mesmo local e remover o web-page antigo
+							editor.createShapes([
+								{
+									id: createShapeId(),
+									type: 'file-card',
+									x: (s as any).x ?? 100,
+									y: (s as any).y ?? 100,
+									props: {
+										w: (s as any).props?.w ?? 300,
+										h: (s as any).props?.h ?? 80,
+										url: url,
+										fileName: url,
+										fileType: 'link',
+										fileSize: 0,
+										assetId: null,
+									},
+								},
+							]);
+							editor.deleteShapes([(s as any).id]);
+							changed = true;
+						}
+					} catch (e) {
+						// URL inválida - ignore
+					}
+				}
+				if (changed) {
+					// Salva novo layout do usuário
+					const user = await getCurrentUser();
+					if (user) {
+						await supabase.from('canvases').upsert({
+							user_id: user.id,
+							layout_data: editor.store.serialize(),
+							updated_at: new Date().toISOString(),
+						});
+					}
+				}
+			} catch (err) {
+				console.error('Erro ao migrar web-page shapes:', err);
+			}
+		})();
 		
 		// Adicionar salvamento antes de sair da página
 		const handleBeforeUnload = async () => {

@@ -8,7 +8,7 @@ export class WebPageShapeUtil extends BaseBoxShapeUtil<any> {
   static override props = {
     w: T.number,
     h: T.number,
-    url: T.string,
+  url: T.string,
   };
 
   override canResize = () => true;
@@ -18,7 +18,7 @@ export class WebPageShapeUtil extends BaseBoxShapeUtil<any> {
     return {
       w: 600,
       h: 400,
-      url: '',
+  url: '',
     };
   }
 
