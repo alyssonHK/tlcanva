@@ -39,7 +39,7 @@ const getFileDimensions = (fileType: string, fileName: string = '') => {
 	return { w: 300, h: 80 };
 };
 
-export function useFileHandlers(editor: Editor | null, onError: (message: string) => void) {
+export function useFileHandlers(editor: Editor | null, onError: (message: string) => void, onFileAdded?: () => void) {
 	const onFileDrop = useCallback(
 		async (info: TLExternalContent) => {
 			if (!editor || info.type !== 'files') return;
@@ -89,6 +89,9 @@ export function useFileHandlers(editor: Editor | null, onError: (message: string
 							},
 						},
 					]);
+					
+					// Notifica que um arquivo foi adicionado para salvar o layout
+					onFileAdded?.();
 				} catch (err: unknown) {
 					const message = err instanceof Error ? err.message : 'An unknown error occurred during upload.';
 					console.error('Upload failed:', message);
@@ -97,7 +100,7 @@ export function useFileHandlers(editor: Editor | null, onError: (message: string
 				}
 			}
 		},
-		[editor, onError]
+		[editor, onError, onFileAdded]
 	);
 
 	const onUrlDrop = useCallback(

@@ -46,19 +46,38 @@ export function Canvas(): React.ReactNode {
 		setTimeout(() => setError(null), 5000);
 	};
 
-	const fileHandlers = useFileHandlers(editor, onError);
+	const fileHandlers = useFileHandlers(editor, onError, async () => {
+		// Callback executado quando um arquivo é adicionado
+		// Força o salvamento imediato do layout
+		if (editor) {
+			try {
+				const user = await getCurrentUser();
+				if (user) {
+					const storeData = editor.store.serialize();
+					await supabase.from('canvases').upsert({
+						user_id: user.id,
+						layout_data: storeData,
+						updated_at: new Date().toISOString(),
+					});
+					console.log('Layout salvo após adicionar arquivo');
+				}
+			} catch (error) {
+				console.error('Erro ao salvar após adicionar arquivo:', error);
+			}
+		}
+	});
 
-const extractFilenameFromUrl = (url: string): string | null => {
-    try {
-        const urlObj = new URL(url);
-        // O caminho do arquivo é a última parte do pathname
-        const pathnameParts = urlObj.pathname.split('/');
-        return pathnameParts[pathnameParts.length - 1] || null;
-    } catch (e) {
-        console.error("Invalid URL for filename extraction", e);
-        return null;
-    }
-};
+	const extractFilenameFromUrl = (url: string): string | null => {
+		try {
+			const urlObj = new URL(url);
+			// O caminho do arquivo é a última parte do pathname
+			const pathnameParts = urlObj.pathname.split('/');
+			return pathnameParts[pathnameParts.length - 1] || null;
+		} catch (e) {
+			console.error("Invalid URL for filename extraction", e);
+			return null;
+		}
+	};
 
 	const handleShapeDelete = useCallback(async (deletedShapes: FileCardShape[]) => {
 		// Remove shape do canvas imediatamente (já é feito pelo editor.deleteShapes)
@@ -95,7 +114,51 @@ const extractFilenameFromUrl = (url: string): string | null => {
 
 	const handleMount = (editor: Editor) => {
 		setEditor(editor);
+		
+		// Adicionar salvamento antes de sair da página
+		const handleBeforeUnload = async () => {
+			try {
+				const storeData = editor.store.serialize();
+				const user = await getCurrentUser();
+				if (user) {
+					// Usa sendBeacon para garantir que seja enviado mesmo quando a página está fechando
+					const data = {
+						user_id: user.id,
+						layout_data: storeData,
+						updated_at: new Date().toISOString(),
+					};
+					
+					// Fallback para fetch síncrono se sendBeacon não estiver disponível
+					await supabase.from('canvases').upsert(data);
+				}
+			} catch (error) {
+				console.error('Erro ao salvar antes de sair:', error);
+			}
+		};
+		
+		window.addEventListener('beforeunload', handleBeforeUnload);
+		window.addEventListener('pagehide', handleBeforeUnload);
+		
+		return () => {
+			window.removeEventListener('beforeunload', handleBeforeUnload);
+			window.removeEventListener('pagehide', handleBeforeUnload);
+		};
 	};
+
+	// Forçar idioma inglês para evitar avisos de tradução pt-br incompleta
+	useEffect(() => {
+		const originalLanguage = navigator.language;
+		Object.defineProperty(navigator, 'language', {
+			writable: true,
+			value: 'en-US'
+		});
+		return () => {
+			Object.defineProperty(navigator, 'language', {
+				writable: true,
+				value: originalLanguage
+			});
+		};
+	}, []);
 
 	useEffect(() => {
 		if (!editor) return;
@@ -130,118 +193,154 @@ const extractFilenameFromUrl = (url: string): string | null => {
 		};
 	}, [editor, fileHandlers.onFileDrop, fileHandlers.onUrlDrop, handleShapeDelete]);
 
-
-
-					// Carregar store salvo do usuário
-						useEffect(() => {
-							(async () => {
-								const user = await getCurrentUser();
-								if (!user) { setLoading(false); return; }
-								// Buscar layout salvo
-								let layoutData = null;
-								const { data, error } = await supabase
-									.from('canvases')
-									.select('layout_data')
-									.eq('user_id', user.id)
-									.single();
-								if (data && data.layout_data) {
-									layoutData = data.layout_data;
-								}
-								setInitialStore(layoutData);
-								setLoading(false);
-							})();
-						}, []);
-
-					// Após montar o editor, sincronizar arquivos do bucket com shapes do canvas
-					useEffect(() => {
-						if (!editor) return;
-						(async () => {
-									const { data: filesData } = await supabase.storage.from('uploads').list('', { limit: 100 });
-									if (!filesData || !Array.isArray(filesData)) return;
-									// Filtrar placeholder 'empty folder'
-									const realFiles = filesData.filter(f => f.name && f.name !== '.emptyFolderPlaceholder');
-									// Mapear URLs já presentes no canvas (apenas file-card)
-									const shapes = editor.getCurrentPageShapes();
-									const urlsInLayout = new Set(
-										shapes
-											.filter(s => s.type === 'file-card')
-											.map(s => (s as FileCardShape).props.url)
-									);
-									// Adicionar shapes para arquivos não referenciados
-									let added = false;
-									for (let i = 0; i < realFiles.length; i++) {
-										const file = realFiles[i];
-										if (!file.name) continue;
-										const { data: publicUrlData } = supabase.storage.from('uploads').getPublicUrl(file.name);
-										if (!urlsInLayout.has(publicUrlData.publicUrl)) {
-											// Criar shape usando a API do editor
-											editor.createShapes([
-												makeFileCardShape({
-													url: publicUrlData.publicUrl,
-													name: file.name,
-													mimeType: file.metadata?.mimetype || '',
-													size: file.metadata?.size || 0,
-												}, i)
-											]);
-											added = true;
-										}
-									}
-									// Se shapes foram adicionadas, salvar novo layout
-									if (added) {
-										const user = await getCurrentUser();
-										if (user) {
-											await supabase.from('canvases').upsert({
-												user_id: user.id,
-												layout_data: editor.store.serialize(),
-												updated_at: new Date().toISOString(),
-											});
-										}
-									}
-								})();
-							}, [editor]);
-
-			// Salvar store serializado sempre que houver mudança
-			useEffect(() => {
-				if (!editor) return;
-				const saveListener = () => {
-					const storeData = editor.store.serialize();
-					(async () => {
-						const user = await getCurrentUser();
-						if (!user) return;
-						await supabase.from('canvases').upsert({
-							user_id: user.id,
-							layout_data: storeData,
-							updated_at: new Date().toISOString(),
-						});
-					})();
-				};
-				const unsubscribe = editor.store.listen(saveListener);
-				return () => unsubscribe();
-			}, [editor]);
-
-					const tldrawProps: TldrawProps = {
-						shapeUtils: customShapeUtils,
-						onMount: handleMount,
-						persistenceKey: undefined, // Desativa localStorage
-						initialData: initialStore || undefined,
-						locale: 'en', // Força idioma inglês para evitar avisos de tradução
-					};
-
-				if (loading) {
-					return (
-						<div className="w-full h-full flex items-center justify-center">
-							<p className="text-lg text-gray-500">Carregando canvas...</p>
-						</div>
-					);
+	// Carregar store salvo do usuário
+	useEffect(() => {
+		(async () => {
+			const user = await getCurrentUser();
+			if (!user) { 
+				setLoading(false); 
+				return; 
+			}
+			
+			try {
+				// Buscar layout salvo do usuário
+				const { data, error } = await supabase
+					.from('canvases')
+					.select('layout_data')
+					.eq('user_id', user.id)
+					.single();
+				
+				if (error && error.code !== 'PGRST116') {
+					// PGRST116 = registro não encontrado (primeira vez do usuário)
+					console.error('Erro ao carregar layout:', error);
 				}
+				
+				if (data && data.layout_data) {
+					console.log('Layout carregado do banco:', Object.keys(data.layout_data).length, 'itens');
+					setInitialStore(data.layout_data);
+				} else {
+					console.log('Nenhum layout salvo encontrado - novo usuário');
+					setInitialStore(null);
+				}
+			} catch (error) {
+				console.error('Erro ao carregar layout:', error);
+				setInitialStore(null);
+			}
+			
+			setLoading(false);
+		})();
+	}, []);
 
-				return (
-					<div className="fixed inset-0">
-						<Header />
-						<div className="pt-16 h-full">
-							<Tldraw {...tldrawProps} />
-						</div>
-						{error && <Toast message={error} />}
-					</div>
-				);
+	// Após montar o editor, sincronizar arquivos do bucket com shapes do canvas
+	useEffect(() => {
+		if (!editor) return;
+		(async () => {
+			const { data: filesData } = await supabase.storage.from('uploads').list('', { limit: 100 });
+			if (!filesData || !Array.isArray(filesData)) return;
+			// Filtrar placeholder 'empty folder'
+			const realFiles = filesData.filter(f => f.name && f.name !== '.emptyFolderPlaceholder');
+			// Mapear URLs já presentes no canvas (apenas file-card)
+			const shapes = editor.getCurrentPageShapes();
+			const urlsInLayout = new Set(
+				shapes
+					.filter(s => s.type === 'file-card')
+					.map(s => (s as FileCardShape).props.url)
+			);
+			// Adicionar shapes para arquivos não referenciados
+			let added = false;
+			for (let i = 0; i < realFiles.length; i++) {
+				const file = realFiles[i];
+				if (!file.name) continue;
+				const { data: publicUrlData } = supabase.storage.from('uploads').getPublicUrl(file.name);
+				if (!urlsInLayout.has(publicUrlData.publicUrl)) {
+					// Criar shape usando a API do editor
+					editor.createShapes([
+						makeFileCardShape({
+							url: publicUrlData.publicUrl,
+							name: file.name,
+							mimeType: file.metadata?.mimetype || '',
+							size: file.metadata?.size || 0,
+						}, i)
+					]);
+					added = true;
+				}
+			}
+			// Se shapes foram adicionadas, salvar novo layout
+			if (added) {
+				const user = await getCurrentUser();
+				if (user) {
+					await supabase.from('canvases').upsert({
+						user_id: user.id,
+						layout_data: editor.store.serialize(),
+						updated_at: new Date().toISOString(),
+					});
+				}
+			}
+		})();
+	}, [editor]);
+
+	// Salvar store serializado sempre que houver mudança (com debounce)
+	useEffect(() => {
+		if (!editor) return;
+		
+		let saveTimeout: NodeJS.Timeout;
+		
+		const saveListener = () => {
+			// Debounce para evitar muitas salvadas seguidas
+			clearTimeout(saveTimeout);
+			saveTimeout = setTimeout(async () => {
+				try {
+					const storeData = editor.store.serialize();
+					const user = await getCurrentUser();
+					if (!user) return;
+					
+					// Salva no Supabase com upsert para garantir que sempre funcione
+					const { error } = await supabase.from('canvases').upsert({
+						user_id: user.id,
+						layout_data: storeData,
+						updated_at: new Date().toISOString(),
+					});
+					
+					if (error) {
+						console.error('Erro ao salvar layout:', error);
+					} else {
+						console.log('Layout salvo com sucesso');
+					}
+				} catch (error) {
+					console.error('Erro ao salvar layout:', error);
+				}
+			}, 500); // Aguarda 500ms após a última mudança
+		};
+		
+		const unsubscribe = editor.store.listen(saveListener);
+		return () => {
+			clearTimeout(saveTimeout);
+			unsubscribe();
+		};
+	}, [editor]);
+
+	const tldrawProps: TldrawProps = {
+		shapeUtils: customShapeUtils,
+		onMount: handleMount,
+		persistenceKey: undefined, // Desativa localStorage
+		initialData: initialStore || undefined,
+	};
+
+	if (loading) {
+		return (
+			<div className="w-full h-full flex items-center justify-center">
+				<p className="text-lg text-gray-500">Carregando canvas...</p>
+			</div>
+		);
+	}
+
+	return (
+		<div className="fixed inset-0">
+			<Header />
+			<div className="pt-16 h-full">
+				<Tldraw {...tldrawProps} />
+			</div>
+			{error && <Toast message={error} />}
+		</div>
+	);
 }

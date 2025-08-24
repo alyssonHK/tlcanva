@@ -58,23 +58,23 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   const logout = async () => {
-    await supabase.auth.signOut();
+    // Atualiza o estado imediatamente para feedback visual rápido
     setSession(null);
     setUser(null);
-    // Limpa todos os itens do localStorage relacionados ao Supabase
+    
+    // Executa signOut em background - não precisa esperar
+    supabase.auth.signOut().catch(console.error);
+    
+    // Limpeza mínima necessária apenas das chaves principais do Supabase
     try {
+      // Remove as chaves mais comuns do Supabase auth
       Object.keys(localStorage)
-        .filter((k) => k.toLowerCase().includes('supabase'))
-        .forEach((k) => localStorage.removeItem(k));
+        .filter(k => k.startsWith('sb-') && k.includes('-auth-token'))
+        .forEach(k => localStorage.removeItem(k));
     } catch {}
-    // Limpa cookies de sessão (se houver)
-    document.cookie.split(';').forEach(function(c) {
-      if (c.trim().toLowerCase().includes('supabase')) {
-        document.cookie = c.replace(/^ +/, '').replace(/=.*/, '=;expires=' + new Date().toUTCString() + ';path=/');
-      }
-    });
-    // Redireciona explicitamente para a tela de login
-    window.location.href = '/login';
+    
+    // Redireciona imediatamente usando navegação programática
+    window.location.replace('/');
   };
 
   const value: AuthContextType = {

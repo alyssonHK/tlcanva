@@ -1,12 +1,19 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 
 export const Header: React.FC = () => {
   const { user, logout } = useAuth();
+  const [isLoggingOut, setIsLoggingOut] = useState(false);
 
-  const handleLogout = () => {
-    if (window.confirm('Tem certeza que deseja sair?')) {
-      logout();
+  const handleLogout = async () => {
+    if (isLoggingOut) return; // Previne múltiplos cliques
+    
+    setIsLoggingOut(true);
+    try {
+      await logout();
+    } catch (error) {
+      console.error('Erro ao fazer logout:', error);
+      setIsLoggingOut(false);
     }
   };
 
@@ -36,13 +43,22 @@ export const Header: React.FC = () => {
               
               <button
                 onClick={handleLogout}
-                className="inline-flex items-center px-3 py-2 border border-transparent text-sm leading-4 font-medium rounded-md text-gray-500 hover:text-gray-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
-                title="Sair"
+                disabled={isLoggingOut}
+                className={`inline-flex items-center px-3 py-2 border border-transparent text-sm leading-4 font-medium rounded-md focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 ${
+                  isLoggingOut 
+                    ? 'text-gray-400 cursor-not-allowed' 
+                    : 'text-gray-500 hover:text-gray-700'
+                }`}
+                title={isLoggingOut ? "Saindo..." : "Sair"}
               >
-                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
-                </svg>
-                <span className="ml-1 hidden sm:inline">Sair</span>
+                {isLoggingOut ? (
+                  <div className="w-4 h-4 animate-spin rounded-full border-2 border-gray-300 border-t-gray-600"></div>
+                ) : (
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
+                  </svg>
+                )}
+                <span className="ml-1 hidden sm:inline">{isLoggingOut ? "Saindo..." : "Sair"}</span>
               </button>
             </div>
           )}
