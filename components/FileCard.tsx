@@ -137,15 +137,13 @@ export const FileCard: React.FC<FileCardProps> = ({ url, fileName, fileType, fil
 	// Se tem preview e está mostrando o preview, renderiza o conteúdo do arquivo
 	if (hasPreview && showPreview && !isUploading) {
 		return (
-			<div 
-				className="w-full h-full flex flex-col"
-				onPointerDown={(e) => e.stopPropagation()} // Impede interferência do TLDraw
-				onPointerUp={(e) => e.stopPropagation()}
-				onPointerMove={(e) => e.stopPropagation()}
-				onClick={(e) => e.stopPropagation()}
-			>
+			<div className="w-full h-full flex flex-col">
 				{/* Header com nome do arquivo e ações, fora do preview */}
-				<div className="w-full flex items-center justify-between px-2 pt-2 pb-1 bg-gray-800">
+				<div
+					className="w-full flex items-center justify-between px-2 pt-2 pb-1 bg-gray-800 cursor-move select-none"
+					// Não faz stopPropagation aqui! Permite mover o card pelo TLDraw
+					title="Clique e arraste aqui para mover"
+				>
 					<div className="flex flex-col flex-grow min-w-0">
 						<p className="truncate font-medium text-sm text-white" title={fileName}>
 							{fileName}
@@ -177,7 +175,13 @@ export const FileCard: React.FC<FileCardProps> = ({ url, fileName, fileType, fil
 					</div>
 				</div>
 				{/* Preview do arquivo */}
-				<div className="flex-1 flex min-h-0 min-w-0">
+				<div
+					className="flex-1 flex min-h-0 min-w-0"
+					onPointerDown={(e) => e.stopPropagation()}
+					onPointerUp={(e) => e.stopPropagation()}
+					onPointerMove={(e) => e.stopPropagation()}
+					onClick={(e) => e.stopPropagation()}
+				>
 					{fileContent}
 				</div>
 			</div>
