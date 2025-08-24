@@ -159,6 +159,23 @@ app.get('/api/proxy', async (req, res) => {
     proxiedHtml = proxiedHtml.replace(/https?:\/\/localhost:\d+/g, baseHref);
     // Remover paths do Vite dev client que possam existir
     proxiedHtml = proxiedHtml.replace(/\/@vite/g, '/');
+    // Reescrever links absolutos que apontam para a mesma origem do target para passar pelo proxy
+    try {
+      const escapedBase = baseHref.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      const hrefRegex = new RegExp(`href=(\\"|\\')${escapedBase}([^\\"\\']*)(\\"|\\')`, 'gi');
+      proxiedHtml = proxiedHtml.replace(hrefRegex, (m, q1, path, q2) => {
+        const full = baseHref + path;
+        return `href=${q1}/api/proxy?url=${encodeURIComponent(full)}${q2}`;
+      });
+      // Também capturar location.href = 'https://base/...'
+      const locRegex = new RegExp(`(location\\.(?:href|assign)\\s*=\\s*)(\\"|\\')${escapedBase}([^\\"\\']*)(\\"|\\')`, 'gi');
+      proxiedHtml = proxiedHtml.replace(locRegex, (m, prefix, q1, path, q2) => {
+        const full = baseHref + path;
+        return `${prefix}${q1}/api/proxy?url=${encodeURIComponent(full)}${q2}`;
+      });
+    } catch (e) {
+      // ignore
+    }
   } catch (e) {
     // se replace falhar por algum motivo, ignoramos e enviamos o html gerado pelo cheerio
   }
