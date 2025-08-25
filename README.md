@@ -4,202 +4,110 @@
 
 # TLDraw File Canvas 🎨📁
 
-Um canvas interativo baseado no TLDraw que permite arrastar e soltar arquivos, visualizá-los diretamente no canvas e organizá-los visualmente. Com sistema completo de autenticação JWT.
+Canvas interativo baseado em TLDraw que permite arrastar e soltar arquivos, visualizá‑los no canvas e organizar visualmente — com autenticação e storage via Supabase e deploy em Vercel.
 
 ## ✨ Funcionalidades
 
-### 🎯 Canvas Interativo
-- **Drag & Drop** de arquivos de qualquer tipo
-- **Visualização inline** de imagens, vídeos, PDFs, Excel, texto e áudio
-- **Redimensionamento** e organização visual dos arquivos
-- **Cartões interativos** com informações detalhadas
+- Drag & Drop de arquivos (imagens, vídeos, PDFs, Excel/CSV, texto, áudio) e links.
+- Visualização inline via componentes interativos (imagem, vídeo, PDF, texto, Excel/CSV).
+- Persistência do layout por usuário no Supabase (`canvases`).
+- Uploads no Supabase Storage (bucket `uploads`, path `user.id/<timestamp>-<nome>`).
+- Embed seguro de páginas via proxy com whitelist e sanitização.
 
-### 📊 Tipos de Arquivo Suportados
-- **Imagens**: JPG, PNG, GIF, SVG, WebP
-- **Vídeos**: MP4, WebM, OGV  
-- **Documentos**: PDF
-- **Planilhas**: Excel (.xlsx, .xls), CSV
-- **Áudio**: MP3, WAV, OGG
-- **Texto**: TXT, JSON, CSV, MD
-- **Links**: URLs com embed automático
+## 🔐 Autenticação
 
-### 🔐 Sistema de Autenticação
-- **Login/Registro** com JWT
-- **Autenticação segura** com bcrypt
-- **Proteção de rotas** de upload
-- **Gerenciamento de sessão** persistente
-- **Interface responsiva** de login
+- Autenticação via Supabase (e‑mail/senha). Não há JWT/bcrypt próprios.
+- Frontend usa `@supabase/supabase-js` com `VITE_SUPABASE_URL` e `VITE_SUPABASE_ANON_KEY`.
 
-### 🛡️ Segurança
-- **Tokens JWT** com expiração
-- **Hash de senhas** com bcryptjs
-- **Middleware de autenticação** para APIs
-- **Validação** de entrada de dados
-- **CORS** configurado para produção
+## 🧱 Requisitos
 
-## 🚀 Instalação e Desenvolvimento
+- Node.js 18+
+- Conta e projeto no Supabase (Auth + Storage habilitados)
 
-### Pré-requisitos
-- Node.js 18+ 
-- npm ou yarn
+## ⚙️ Configuração de Ambiente
 
-### 1. Clone o repositório
-```bash
-git clone <url-do-repositorio>
-cd tldraw-file-canvas
+Crie `.env.local` (dev) com as chaves do seu projeto Supabase:
+
+```
+VITE_SUPABASE_URL=https://<PROJECT>.supabase.co
+VITE_SUPABASE_ANON_KEY=<anon-key>
+
+# Backend (usado pelo server.mjs)
+SUPABASE_URL=https://<PROJECT>.supabase.co
+SUPABASE_ANON_KEY=<anon-key>
+
+# Domínios permitidos para embed no proxy (opcional)
+EMBED_WHITELIST=github.com,crunchyroll.com,facebook.com
 ```
 
-### 2. Instale as dependências
+No Supabase, crie a tabela de layout:
+
+```sql
+create table if not exists canvases (
+  user_id uuid references auth.users(id) on delete cascade primary key,
+  layout_data jsonb not null,
+  updated_at timestamp with time zone default now()
+);
+```
+
+E o bucket de storage `uploads` (público) — o app usa `getPublicUrl` para exibir arquivos.
+
+## 🧑‍💻 Desenvolvimento (Local)
+
 ```bash
 npm install
+npm run dev           # Vite (5173) + backend (3000)
 ```
 
-### 3. Configure variáveis de ambiente
+- Frontend: http://localhost:5173
+- Backend (proxy/upload): http://localhost:3000
+
+## ▲ Deploy na Vercel
+
+1) Configure variáveis de ambiente no projeto Vercel:
+- `VITE_SUPABASE_URL`, `VITE_SUPABASE_ANON_KEY`
+- `SUPABASE_URL`, `SUPABASE_ANON_KEY`
+- (opcional) `EMBED_WHITELIST`
+
+2) O arquivo `vercel.json` já reescreve:
+- `/api/*` e `/uploads/*` para `server.mjs` (função Node)
+- demais rotas para `index.html`
+
+3) Build/Output
+- Build do frontend: `npm run build` (gera `dist/`)
+- A função `server.mjs` roda no runtime Node da Vercel para `/api/*`
+
+Nota: o fallback com `puppeteer` no proxy pode não funcionar no ambiente serverless padrão. Em Vercel, considere manter apenas a versão “sem scripts” (já padrão) ou adaptar para `@sparticuz/chromium` se necessário.
+
+## 🔧 Comandos
+
 ```bash
-cp .env.local.example .env.local
+npm run dev       # Frontend + backend local
+npm run build     # Build do frontend
+npm run preview   # Preview do Vite
+npm run lint      # Lint
 ```
 
-Edite o arquivo `.env.local`:
-```env
-GEMINI_API_KEY=PLACEHOLDER_API_KEY
-VITE_BACKEND_URL=http://localhost:3001
-JWT_SECRET=your-super-secret-jwt-key-change-this-in-production
-NODE_ENV=development
-```
-
-### 4. Execute em desenvolvimento
-```bash
-# Executar frontend e backend simultaneamente
-npm run dev
-
-# Ou separadamente:
-npm run dev:frontend  # Porta 5173
-npm run dev:backend   # Porta 3001
-```
-
-### 5. Acesse a aplicação
-- **Frontend**: http://localhost:5173
-- **Backend API**: http://localhost:3001/api/health
-
-## 🌐 Deploy no Ubuntu Server
-
-### 1. Execute o script de instalação
-```bash
-# Faça upload do script e torne-o executável
-chmod +x deploy-ubuntu.sh
-./deploy-ubuntu.sh
-```
-
-### 2. Configure o projeto
-```bash
-# Navegue para o diretório
-cd /var/www/tldraw-file-canvas
-
-# Instale dependências
-npm install --production
-
-# Configure variáveis de ambiente
-cp .env.production.example .env.production
-nano .env.production
-```
-
-### 3. Build da aplicação
-```bash
-npm run build
-```
-
-### 4. Inicie com PM2
-```bash
-# Usando configuração do ecosystem
-pm2 start ecosystem.config.json
-
-# Ou comando direto
-pm2 start server.mjs --name tldraw-api
-
-# Salvar configuração para reinicialização automática
-pm2 save
-pm2 startup
-```
-
-### 5. Configure o Nginx
-```bash
-# Copie a configuração
-sudo cp nginx.conf /etc/nginx/sites-available/tldraw-file-canvas
-
-# Habilite o site
-sudo ln -s /etc/nginx/sites-available/tldraw-file-canvas /etc/nginx/sites-enabled/
-
-# Teste e recarregue
-sudo nginx -t
-sudo systemctl reload nginx
-```
-
-### 6. Configure SSL (Let's Encrypt)
-```bash
-# Instale certbot
-sudo apt install certbot python3-certbot-nginx
-
-# Obtenha certificado SSL
-sudo certbot --nginx -d seu-dominio.com
-```
-
-## 🔧 Comandos Úteis
-
-### Desenvolvimento
-```bash
-npm run dev          # Frontend + Backend
-npm run dev:frontend # Apenas frontend  
-npm run dev:backend  # Apenas backend
-npm run build        # Build para produção
-npm run lint         # Verificar código
-```
-
-### Produção (PM2)
-```bash
-pm2 list             # Listar processos
-pm2 logs tldraw-api  # Ver logs
-pm2 restart tldraw-api # Reiniciar
-pm2 stop tldraw-api  # Parar
-pm2 delete tldraw-api # Remover
-```
-
-## 📁 Estrutura do Projeto
+## 📁 Estrutura
 
 ```
-tldraw-file-canvas/
-├── components/           # Componentes React
-│   ├── auth/            # Componentes de autenticação
-│   ├── Canvas.tsx       # Canvas principal
-│   ├── FileCard.tsx     # Cartão de arquivo
-│   └── Header.tsx       # Cabeçalho com usuário
-├── contexts/            # Contextos React
-│   └── AuthContext.tsx  # Contexto de autenticação
-├── hooks/               # Hooks personalizados
-│   └── useFileHandlers.ts # Lógica de arquivo
-├── services/            # Serviços
-│   └── uploadService.ts # Upload de arquivos
-├── utils/               # Utilitários
-│   └── files.ts         # Manipulação de arquivos
-├── server.mjs           # Servidor Express
-├── auth.mjs             # Sistema de autenticação
-├── users.json           # Banco de dados de usuários
-└── uploads/             # Arquivos enviados
+components/        # UI + shapes TLDraw (FileCard, WebPage, viewers)
+contexts/          # AuthContext + supabase client
+hooks/             # useFileHandlers (drag&drop, upload, links)
+services/          # uploadService (Supabase Storage)
+server.mjs         # Express: /api/upload, /api/proxy, /api/proxy/info
+utils/             # utilitários (ícones, formatters)
 ```
 
-## 🔐 API Endpoints
+## 🔒 CORS & Proxy
 
-### Autenticação
-- `POST /api/auth/register` - Registrar usuário
-- `POST /api/auth/login` - Fazer login
-- `GET /api/auth/me` - Obter usuário atual
-- `POST /api/auth/logout` - Logout
+- Em produção na Vercel, as chamadas vão para a mesma origem (rewrites), minimizando CORS.
+- Em dev, `http://localhost:5173` já está liberado no `server.mjs`.
 
-### Upload
-- `POST /api/upload` - Upload de arquivo (protegido)
+## 🧹 Notas de Manutenção
 
-### Sistema  
-- `GET /api/health` - Verificação de saúde
-- `GET /uploads/:filename` - Servir arquivos
+- Dependências legadas de JWT/bcrypt foram removidas.
+- Porta de dev do backend: `3000` (ajuste seu `.env.local`/scripts se necessário).
 
 ## 🛠️ Tecnologias Utilizadas
 

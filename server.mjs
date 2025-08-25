@@ -37,7 +37,9 @@ app.use(cors({
   allowedHeaders: ['Authorization', 'Content-Type'],
   credentials: true,
 }));
-app.use(express.json());
+// Aumenta o limite do body parser para suportar payloads JSON maiores no proxy
+app.use(express.json({ limit: '5mb' }));
+app.use(express.urlencoded({ limit: '5mb', extended: true }));
 
 const upload = multer({ storage: multer.memoryStorage() });
 
@@ -76,7 +78,7 @@ app.post('/api/upload', authenticateSupabaseToken, upload.single('file'), async 
 });
 
 // ROTA DE PROXY PARA PÁGINAS WEB
-app.get('/api/proxy', async (req, res) => {
+app.all('/api/proxy', async (req, res) => {
   const targetUrl = req.query.url;
 
   if (!targetUrl || typeof targetUrl !== 'string') {
@@ -84,31 +86,50 @@ app.get('/api/proxy', async (req, res) => {
   }
 
   try {
-    // Tenta buscar a página com headers semelhantes a um browser e seguindo redirects.
-    // Alguns sites (Cloudflare, bot-protection) ainda podem bloquear esse request e exigir um navegador headless.
-    const response = await axios.get(targetUrl, {
-      responseType: 'text',
+    const method = (req.method || 'GET').toUpperCase();
+    const isGet = method === 'GET';
+    // Busca recurso como arraybuffer para decidir se é HTML ou asset binário e tratar corretamente
+    const reqContentType = req.headers['content-type'] || '';
+    const axiosConfig = {
+      url: targetUrl,
+      method,
+      responseType: 'arraybuffer',
       maxRedirects: 10,
       headers: {
         'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/116.0.0.0 Safari/537.36',
         'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8',
         'Accept-Language': 'en-US,en;q=0.9',
-        'Referer': 'https://www.google.com/',
-        // Some servers look for these fetch metadata headers; presence may help
-        'Sec-Fetch-Site': 'none',
-        'Sec-Fetch-Mode': 'navigate',
-        'Sec-Fetch-User': '?1',
-        'Sec-Fetch-Dest': 'document'
+        // Evite enviar Host/Origin/Cookie do seu domínio
+        // Forward mínimo; axios definirá Host corretamente
+        ...(reqContentType ? { 'Content-Type': reqContentType } : {}),
       },
       validateStatus: status => status >= 200 && status < 400,
       // timeout: 10000,
-    });
+    };
+    if (!isGet) {
+      // Suporte básico a JSON/texto
+      const body = req.body;
+      axiosConfig.data = reqContentType && /application\/json|text\//i.test(reqContentType) ? body : body;
+    }
+    const response = await axios.request(axiosConfig);
 
-    const html = response.data;
+    const respHeaders = response.headers || {};
+    const contentType = (respHeaders['content-type'] || respHeaders['Content-Type'] || '').toString();
+
+    // Se não for HTML, fazer passthrough do asset (imagem, css, js, etc.)
+    if (!/text\/html/i.test(contentType) || !isGet) {
+      try {
+        if (contentType) res.set('Content-Type', contentType);
+        // Forward cache headers básicos quando possível
+        const cacheControl = respHeaders['cache-control'] || respHeaders['Cache-Control'];
+        if (cacheControl) res.set('Cache-Control', cacheControl);
+      } catch {}
+      return res.status(response.status).send(Buffer.from(response.data));
+    }
+
+    const html = Buffer.from(response.data).toString('utf-8');
   const $ = cheerioLoad(html);
-
   // Detect headers that forbid framing (Content-Security-Policy with frame-ancestors or X-Frame-Options)
-  const respHeaders = response.headers || {};
   const csp = (respHeaders['content-security-policy'] || respHeaders['Content-Security-Policy'] || '').toString();
   const xframe = (respHeaders['x-frame-options'] || respHeaders['X-Frame-Options'] || '').toString();
   const frameDisallowed = /frame-ancestors\s+('none'|none)/i.test(csp) || /deny/i.test(xframe) || /sameorigin/i.test(xframe) && (new URL(targetUrl).origin !== (req.protocol + '://' + req.get('host')));
@@ -151,6 +172,30 @@ app.get('/api/proxy', async (req, res) => {
   // Remove qualquer tag <base> existente e injeta a nova
   $('head base').remove();
   $('head').prepend(`<base href="${baseHref}">`);
+
+  // Reescrever recursos comuns para passar pelo proxy (img, script, link, media)
+  try {
+    const EMBED_WHITELIST = (process.env.EMBED_WHITELIST || 'github.com,crunchyroll.com,facebook.com').split(',').map(s => s.trim().replace(/^www\./, '')).filter(Boolean);
+    const proxifyAttr = (selector, attr) => {
+      $(selector).each((_, el) => {
+        const val = $(el).attr(attr);
+        if (!val) return;
+        if (/^(data:|blob:|javascript:|#)/i.test(val)) return;
+        try {
+          const resolved = new URL(val, baseHref).toString();
+          const host = new URL(resolved).hostname.replace(/^www\./, '');
+          const embedParam = EMBED_WHITELIST.includes(host) ? '&embed=1' : '';
+          $(el).attr(attr, `/api/proxy?url=${encodeURIComponent(resolved)}${embedParam}`);
+        } catch {}
+      });
+    };
+    proxifyAttr('img', 'src');
+    proxifyAttr('script', 'src');
+    proxifyAttr('link', 'href');
+    proxifyAttr('source', 'src');
+    proxifyAttr('video', 'src');
+    proxifyAttr('audio', 'src');
+  } catch {}
 
   // Agora gera o HTML final a partir do DOM modificado e aplica substituições finais
   let proxiedHtml = $.html();
@@ -226,9 +271,17 @@ app.get('/api/proxy', async (req, res) => {
       $('body').prepend('<div style="background:#ffefc2;color:#5a3e00;padding:8px;text-align:center;font-size:13px;">Este site envia políticas que impedem que seja exibido dentro de frames. Exibindo versão proxied sem scripts.</div>');
     }
 
+      // Injetar helper para proxificar fetch/XHR em modo embed permitido (apenas GET)
+      if (allowScripts) {
+        try {
+          const clientHelper = `\n<script>(function(){try{var of=window.fetch;window.fetch=function(i,n){try{var u=typeof i==='string'?i:(i&&i.url)||'';if(u.startsWith('/api/proxy')) return of(i,n);var m=(n&&n.method)||(i&&i.method)||'GET';if(/^https?:\\/\\//.test(u)&&(m==='GET'||m==='POST')){var p='/api/proxy?url='+encodeURIComponent(u)+'&embed=1';var init=Object.assign({},n||{}, { method:m, mode:'cors'});return of(p,init);} }catch(e){} return of(i,n);};}catch(e){}})();</script>`;
+          // Append before closing body
+          proxiedHtml = proxiedHtml.replace(/<\/body>/i, clientHelper + '</body>');
+        } catch {}
+      }
       // Enviar HTML modificado como resposta (mesma origem do seu backend)
       res.set('Content-Type', 'text/html; charset=utf-8');
-    console.log('[proxy] sending proxied html for', targetUrl, 'allowScripts=', allowScripts);
+      console.log('[proxy] sending proxied html for', targetUrl, 'allowScripts=', allowScripts);
       res.send(proxiedHtml);
   } catch (error) {
     // Log detalhado para diagnosticar bloqueios (ex.: 403 do Cloudflare, 503, etc.)

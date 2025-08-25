@@ -46,11 +46,14 @@ export async function uploadFile(file: File): Promise<UploadedFile> {
   };
 }
 
-export async function deleteFile(filename: string): Promise<void> {
-  // Obter token do localStorage
-    // Obter token do Supabase (sempre atualizado)
-  // Remove arquivo do Supabase Storage
-  const { error } = await supabase.storage.from('uploads').remove([filename]);
+export async function deleteFile(pathOrName: string): Promise<void> {
+  // Aceita tanto o caminho completo (ex.: "userId/arquivo.png") quanto apenas o nome.
+  const user = await getCurrentUser();
+  if (!user) throw new Error('Usuário não autenticado');
+
+  const isFullPath = pathOrName.includes('/');
+  const storagePath = isFullPath ? pathOrName : `${user.id}/${pathOrName}`;
+  const { error } = await supabase.storage.from('uploads').remove([storagePath]);
   if (error) {
     throw new Error(error.message);
   }

@@ -84,14 +84,18 @@ export function Canvas(): React.ReactNode {
 		}
 	});
 
-	const extractFilenameFromUrl = (url: string): string | null => {
+	// Extrai o caminho do objeto no Storage a partir de uma public URL do Supabase
+	// Ex.: https://<proj>.supabase.co/storage/v1/object/public/uploads/<userId>/<filename>
+	// Retorna: <userId>/<filename>
+	const extractStoragePathFromUrl = (url: string): string | null => {
 		try {
 			const urlObj = new URL(url);
-			// O caminho do arquivo é a última parte do pathname
-			const pathnameParts = urlObj.pathname.split('/');
-			return pathnameParts[pathnameParts.length - 1] || null;
+			const idx = urlObj.pathname.indexOf('/uploads/');
+			if (idx === -1) return null;
+			const rest = urlObj.pathname.substring(idx + '/uploads/'.length);
+			return decodeURIComponent(rest);
 		} catch (e) {
-			console.error("Invalid URL for filename extraction", e);
+			console.error('Invalid URL for storage path extraction', e);
 			return null;
 		}
 	};
@@ -112,11 +116,11 @@ export function Canvas(): React.ReactNode {
 		// Exclui arquivos do Supabase em background
 		for (const shape of deletedShapes) {
 			if (shape.type === 'file-card' && shape.props.url) {
-				const filename = extractFilenameFromUrl(shape.props.url);
-				if (filename) {
-					deleteFile(filename)
+				const storagePath = extractStoragePathFromUrl(shape.props.url);
+				if (storagePath) {
+					deleteFile(storagePath)
 						.then(() => {
-							console.log(`File ${filename} deleted from server`);
+							console.log(`File ${storagePath} deleted from storage`);
 						})
 						.catch((error) => {
 							console.error('Error deleting file from server:', error);
